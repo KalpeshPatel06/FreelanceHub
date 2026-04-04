@@ -1,0 +1,35 @@
+# ============================================================
+# .gitignore for FreelanceHub
+# Never commit: compiled code, secrets, IDE files, OS files
+# ============================================================
+
+# ---- Maven build output ----
+backend/target/
+*.jar
+*.war
+*.ear
+
+# ---- IDE files ----
+.idea/
+*.iml
+.vscode/
+*.class
+
+# ---- Environment / secrets (NEVER commit these) ----
+.env
+.env.local
+*.env
+application-prod.properties
+
+# ---- OS files ----
+.DS_Store
+Thumbs.db
+*.swp
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- AWS credentials ----
+.aws/
+credentials

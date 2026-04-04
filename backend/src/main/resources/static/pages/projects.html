@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Browse Projects – FreelanceHub</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"/>
+  <link rel="stylesheet" href="/css/styles.css"/>
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<!-- Page header -->
+<div class="bg-white border-bottom py-4">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+      <div>
+        <h1 class="section-title mb-0">Browse Projects</h1>
+        <p class="text-muted mb-0 mt-1" id="result-count">Loading…</p>
+      </div>
+      <!-- Search -->
+      <div class="d-flex gap-2">
+        <div class="input-group">
+          <input type="text" class="form-control" id="search-input"
+                 placeholder="Search projects…" style="width:240px"/>
+          <button class="btn btn-outline-secondary" id="search-btn">
+            <i class="bi bi-search"></i>
+          </button>
+          <button class="btn btn-outline-secondary d-none" id="clear-btn" title="Clear search">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Projects grid -->
+<div class="container py-5">
+  <div class="row g-4" id="projects-grid">
+    <!-- Skeleton placeholders -->
+    ${Array(9).fill(`
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 p-3 placeholder-glow">
+          <div class="placeholder col-4 mb-2 rounded"></div>
+          <div class="placeholder col-9 mb-1 rounded"></div>
+          <div class="placeholder col-6 rounded"></div>
+        </div>
+      </div>`).join('')}
+  </div>
+
+  <!-- Pagination -->
+  <nav class="mt-5" id="pagination-nav" aria-label="Projects pagination">
+    <ul class="pagination justify-content-center" id="pagination"></ul>
+  </nav>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/api.js"></script>
+<script>
+  renderNavbar();
+
+  let currentPage = 0;
+  const PAGE_SIZE = 9;
+  let searchMode = false;
+  let searchKeyword = '';
+
+  // Check for search param from homepage
+  const urlParams = new URLSearchParams(location.search);
+  const initialSearch = urlParams.get('search');
+  if (initialSearch) {
+    document.getElementById('search-input').value = initialSearch;
+    searchKeyword = initialSearch;
+    searchMode = true;
+  }
+
+  function renderProjectCard(p) {
+    return `
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 project-card p-3"
+             onclick="location.href='/pages/project-detail.html?id=${p.id}'">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            ${UI.statusBadge(p.status)}
+            <span class="budget">${UI.currency(p.budget)}</span>
+          </div>
+          <h6 class="card-title mb-2">${p.title}</h6>
+          <p class="description text-muted mb-3">${p.description}</p>
+          <div class="mt-auto d-flex justify-content-between meta">
+            <span><i class="bi bi-person me-1"></i>${p.clientName}</span>
+            <span><i class="bi bi-chat-left-dots me-1"></i>${p.bidCount} bid${p.bidCount!==1?'s':''}</span>
+            <span><i class="bi bi-calendar me-1"></i>${UI.date(p.deadline)}</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderPagination(totalPages, current) {
+    const nav = document.getElementById('pagination');
+    if (totalPages <= 1) { nav.innerHTML = ''; return; }
+
+    let html = `
+      <li class="page-item ${current === 0 ? 'disabled' : ''}">
+        <a class="page-link" href="#" data-page="${current - 1}">
+          <i class="bi bi-chevron-left"></i>
+        </a>
+      </li>`;
+
+    for (let i = 0; i < totalPages; i++) {
+      html += `
+        <li class="page-item ${i === current ? 'active' : ''}">
+          <a class="page-link" href="#" data-page="${i}">${i + 1}</a>
+        </li>`;
+    }
+
+    html += `
+      <li class="page-item ${current === totalPages - 1 ? 'disabled' : ''}">
+        <a class="page-link" href="#" data-page="${current + 1}">
+          <i class="bi bi-chevron-right"></i>
+        </a>
+      </li>`;
+
+    nav.innerHTML = html;
+    nav.querySelectorAll('[data-page]').forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        loadPage(parseInt(link.dataset.page));
+      });
+    });
+  }
+
+  async function loadPage(page) {
+    currentPage = page;
+    const grid = document.getElementById('projects-grid');
+    grid.innerHTML = Array(9).fill(`
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 p-3 placeholder-glow">
+          <div class="placeholder col-4 mb-2 rounded"></div>
+          <div class="placeholder col-9 mb-1 rounded"></div>
+          <div class="placeholder col-6 rounded"></div>
+        </div>
+      </div>`).join('');
+
+    try {
+      if (searchMode && searchKeyword) {
+        const res = await ProjectsAPI.search(searchKeyword);
+        const projects = res.data;
+        document.getElementById('result-count').textContent =
+          `${projects.length} result${projects.length !== 1 ? 's' : ''} for "${searchKeyword}"`;
+        document.getElementById('pagination').innerHTML = '';
+        grid.innerHTML = projects.length
+          ? projects.map(renderProjectCard).join('')
+          : '<div class="col-12"><div class="empty-state"><div class="icon">🔍</div><h5>No projects found</h5><p>Try different keywords</p></div></div>';
+      } else {
+        const res = await ProjectsAPI.getAll(page, PAGE_SIZE);
+        const { content, totalElements, totalPages } = res.data;
+        document.getElementById('result-count').textContent =
+          `${totalElements} open project${totalElements !== 1 ? 's' : ''}`;
+        grid.innerHTML = content.length
+          ? content.map(renderProjectCard).join('')
+          : '<div class="col-12"><div class="empty-state"><div class="icon">📋</div><h5>No projects yet</h5><p>Check back soon!</p></div></div>';
+        renderPagination(totalPages, page);
+      }
+    } catch (err) {
+      grid.innerHTML = `<div class="col-12 text-center text-danger py-4">${err.message}</div>`;
+    }
+  }
+
+  // Search logic
+  function doSearch() {
+    const kw = document.getElementById('search-input').value.trim();
+    if (!kw) { clearSearch(); return; }
+    searchKeyword = kw;
+    searchMode = true;
+    document.getElementById('clear-btn').classList.remove('d-none');
+    loadPage(0);
+  }
+
+  function clearSearch() {
+    searchKeyword = '';
+    searchMode = false;
+    document.getElementById('search-input').value = '';
+    document.getElementById('clear-btn').classList.add('d-none');
+    loadPage(0);
+  }
+
+  document.getElementById('search-btn').addEventListener('click', doSearch);
+  document.getElementById('clear-btn').addEventListener('click', clearSearch);
+  document.getElementById('search-input').addEventListener('keyup', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+
+  loadPage(0);
+</script>
+</body>
+</html>

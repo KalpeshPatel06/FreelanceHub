@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Profile – FreelanceHub</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"/>
+  <link rel="stylesheet" href="/css/styles.css"/>
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+
+      <h1 class="section-title">My Profile</h1>
+      <p class="section-sub">Manage your account information.</p>
+
+      <div class="card p-4 mb-4" id="profile-card">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Image upload input (hidden) -->
+<input type="file" id="file-input" accept="image/*" class="d-none"/>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/api.js"></script>
+<script>
+  renderNavbar();
+  Auth.requireAuth();
+
+  async function loadProfile() {
+    try {
+      const res = await UsersAPI.getProfile();
+      const user = res.data;
+      renderProfile(user);
+    } catch (err) {
+      document.getElementById('profile-card').innerHTML =
+        `<div class="alert alert-danger">${err.message}</div>`;
+    }
+  }
+
+  function renderProfile(user) {
+    const avatarHtml = user.profileImageUrl
+      ? `<img src="${user.profileImageUrl}" class="avatar avatar-lg mb-3" alt="Profile"
+              style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid var(--border)"/>`
+      : `<div class="avatar-placeholder avatar-lg mb-3 mx-auto">${UI.initials(user.name)}</div>`;
+
+    document.getElementById('profile-card').innerHTML = `
+      <div class="text-center mb-4">
+        ${avatarHtml}
+        <h4 class="fw-800 mb-1">${user.name}</h4>
+        <span class="status-pill ${user.role === 'CLIENT' ? 'badge-open' : 'badge-completed'}">
+          ${user.role}
+        </span>
+        <div class="mt-3">
+          <button class="btn btn-outline-primary btn-sm" id="upload-btn">
+            <i class="bi bi-camera me-1"></i>Change Photo
+          </button>
+          <div class="form-text mt-1">Max 5MB. JPG, PNG, or GIF.</div>
+          <div id="upload-status" class="mt-2"></div>
+        </div>
+      </div>
+
+      <hr/>
+
+      <div class="row g-3 mt-1">
+        <div class="col-sm-6">
+          <label class="form-label text-muted small text-uppercase fw-600">Full Name</label>
+          <div class="fw-600">${user.name}</div>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label text-muted small text-uppercase fw-600">Email</label>
+          <div class="fw-600">${user.email}</div>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label text-muted small text-uppercase fw-600">Role</label>
+          <div class="fw-600">${user.role}</div>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label text-muted small text-uppercase fw-600">Member Since</label>
+          <div class="fw-600">${user.createdAt ? UI.date(user.createdAt) : '—'}</div>
+        </div>
+        ${user.role === 'CLIENT' ? `
+        <div class="col-sm-6">
+          <label class="form-label text-muted small text-uppercase fw-600">Projects Posted</label>
+          <div class="fw-600">${user.projectCount || 0}</div>
+        </div>` : `
+        <div class="col-sm-6">
+          <label class="form-label text-muted small text-uppercase fw-600">Bids Submitted</label>
+          <div class="fw-600">${user.bidCount || 0}</div>
+        </div>`}
+      </div>
+
+      <hr class="my-4"/>
+
+      <div class="d-flex gap-3">
+        <a href="/pages/dashboard.html" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+        </a>
+        <button class="btn btn-danger ms-auto" onclick="logout()">
+          <i class="bi bi-box-arrow-right me-2"></i>Sign Out
+        </button>
+      </div>`;
+
+    // Wire upload button
+    document.getElementById('upload-btn').addEventListener('click', () => {
+      document.getElementById('file-input').click();
+    });
+  }
+
+  // Handle file selection → upload to S3 via backend
+  document.getElementById('file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const status = document.getElementById('upload-status');
+    const btn    = document.getElementById('upload-btn');
+
+    if (file.size > 5 * 1024 * 1024) {
+      status.innerHTML = '<span class="text-danger small">File too large. Max 5MB.</span>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
+    status.innerHTML = '';
+
+    try {
+      await UsersAPI.uploadProfileImage(file);
+      UI.toast('Profile photo updated! ✅', 'success');
+      loadProfile();
+    } catch (err) {
+      status.innerHTML = `<span class="text-danger small">${err.message}</span>`;
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-camera me-1"></i>Change Photo';
+    }
+  });
+
+  loadProfile();
+</script>
+</body>
+</html>
