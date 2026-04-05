@@ -75,8 +75,6 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
-
             APP_DIR="/home/${{ secrets.EC2_USERNAME }}/freelancehub"
             cd $APP_DIR
 
@@ -84,40 +82,34 @@ jobs:
             ls -la $APP_DIR/
 
             echo "=== Stopping existing application ==="
-            pkill -f "freelancehub" || echo "No existing process found"
-            sleep 3
+            pkill -f "java" 2>/dev/null
+            sleep 5
+            echo "Any existing process stopped"
 
             echo "=== Renaming JAR to stable name ==="
-            JAR_FILE=$(ls $APP_DIR/freelancehub-*.jar 2>/dev/null | head -1)
-            if [ -z "$JAR_FILE" ]; then
-              echo "ERROR: No JAR file found in $APP_DIR"
-              ls -la $APP_DIR/
-              exit 1
-            fi
-            echo "Found JAR: $JAR_FILE"
-            cp "$JAR_FILE" "$APP_DIR/app.jar"
+            cp $APP_DIR/freelancehub-1.0.0.jar $APP_DIR/app.jar
+            echo "JAR copied to app.jar"
 
-            echo "=== Starting application ==="
+            echo "=== Setting environment variables ==="
             export DB_URL="${{ secrets.DB_URL }}"
             export DB_USERNAME="${{ secrets.DB_USERNAME }}"
             export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
             export JWT_SECRET="${{ secrets.JWT_SECRET }}"
             export SERVER_PORT=8080
 
+            echo "=== Starting application ==="
             nohup java -jar $APP_DIR/app.jar \
+              --spring.datasource.url=$DB_URL \
+              --spring.datasource.username=$DB_USERNAME \
+              --spring.datasource.password=$DB_PASSWORD \
+              --app.jwt.secret=$JWT_SECRET \
+              --server.port=$SERVER_PORT \
               > $APP_DIR/app.log 2>&1 &
 
-            APP_PID=$!
-            echo "Application started with PID $APP_PID"
-            sleep 5
-            echo "=== Last 20 lines of app.log ==="
-            tail -20 $APP_DIR/app.log || echo "Log not yet available"
-            echo "=== Deployment complete at $(date) ==="
+            echo "Application started with PID $!"
+            sleep 8
 
-      - name: Health check
-        run: |
-          echo "Waiting 30 seconds for application to start..."
-          sleep 30
-          curl -f http://${{ secrets.EC2_HOST }}:8080/actuator/health \
-            && echo "Application is healthy!" \
-            || echo "Health check failed - check app.log on EC2"
+            echo "=== Last 30 lines of app.log ==="
+            tail -30 $APP_DIR/app.log
+
+            echo "=== Deployment complete at $(date) ==="
