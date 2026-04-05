@@ -74,42 +74,34 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: false
           script: |
             APP_DIR="/home/${{ secrets.EC2_USERNAME }}/freelancehub"
-            cd $APP_DIR
-
-            echo "=== Files in app directory ==="
-            ls -la $APP_DIR/
 
             echo "=== Stopping existing application ==="
-            pkill -f "java" 2>/dev/null
-            sleep 5
-            echo "Any existing process stopped"
+            kill $(cat $APP_DIR/app.pid 2>/dev/null) 2>/dev/null || true
+            sleep 3
+            echo "Done stopping"
 
-            echo "=== Renaming JAR to stable name ==="
+            echo "=== Copying JAR ==="
             cp $APP_DIR/freelancehub-1.0.0.jar $APP_DIR/app.jar
-            echo "JAR copied to app.jar"
-
-            echo "=== Setting environment variables ==="
-            export DB_URL="${{ secrets.DB_URL }}"
-            export DB_USERNAME="${{ secrets.DB_USERNAME }}"
-            export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
-            export JWT_SECRET="${{ secrets.JWT_SECRET }}"
-            export SERVER_PORT=8080
+            echo "JAR ready"
 
             echo "=== Starting application ==="
+            cd $APP_DIR
             nohup java -jar $APP_DIR/app.jar \
-              --spring.datasource.url=$DB_URL \
-              --spring.datasource.username=$DB_USERNAME \
-              --spring.datasource.password=$DB_PASSWORD \
-              --app.jwt.secret=$JWT_SECRET \
-              --server.port=$SERVER_PORT \
+              --spring.datasource.url="${{ secrets.DB_URL }}" \
+              --spring.datasource.username="${{ secrets.DB_USERNAME }}" \
+              --spring.datasource.password="${{ secrets.DB_PASSWORD }}" \
+              --app.jwt.secret="${{ secrets.JWT_SECRET }}" \
+              --server.port=8080 \
               > $APP_DIR/app.log 2>&1 &
 
-            echo "Application started with PID $!"
-            sleep 8
+            echo $! > $APP_DIR/app.pid
+            echo "Started with PID $(cat $APP_DIR/app.pid)"
+            sleep 10
 
-            echo "=== Last 30 lines of app.log ==="
+            echo "=== App log ==="
             tail -30 $APP_DIR/app.log
 
-            echo "=== Deployment complete at $(date) ==="
+            echo "=== Done at $(date) ==="
