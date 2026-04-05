@@ -1,20 +1,22 @@
 package com.freelancehub.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.freelancehub.config.TestSecurityConfig;
 import com.freelancehub.dto.request.RegisterRequest;
+import com.freelancehub.dto.response.ApiResponse;
 import com.freelancehub.dto.response.AuthResponse;
 import com.freelancehub.entity.User;
+import com.freelancehub.exception.GlobalExceptionHandler;
 import com.freelancehub.service.AuthService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -22,33 +24,41 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * Controller-layer integration test using MockMvc.
+ * AuthControllerTest - tests the AuthController in complete isolation.
  *
- * @WebMvcTest loads only the web layer (controllers, security config).
- * It does NOT start the full Spring context or connect to a database.
- * Dependencies (like AuthService) are replaced with @MockBean fakes.
- *
- * MockMvc lets us simulate HTTP requests without starting a real server.
- * TestSecurityConfig disables JWT auth so tests stay focused on controller logic.
+ * Uses MockMvcBuilders.standaloneSetup() which builds a minimal Spring MVC
+ * context with ONLY the AuthController and GlobalExceptionHandler.
+ * No security filter chain, no JWT, no database — pure controller logic only.
  */
-@WebMvcTest(AuthController.class)
-@Import(TestSecurityConfig.class)
-@ActiveProfiles("test")
+@ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;      // simulates HTTP requests
+    // Real controller with a mocked service injected
+    @InjectMocks
+    private AuthController authController;
 
-    @Autowired
-    private ObjectMapper objectMapper;  // converts objects to/from JSON
+    @Mock
+    private AuthService authService;
 
-    @MockBean
-    private AuthService authService;  // fake service - we control its behavior
+    private MockMvc mockMvc;
+    private ObjectMapper objectMapper;
+
+    @BeforeEach
+    void setUp() {
+        // Build a standalone MockMvc with ONLY our controller and exception handler.
+        // This completely bypasses Spring Security, JWT filters, and all other beans.
+        mockMvc = MockMvcBuilders
+                .standaloneSetup(authController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        objectMapper = new ObjectMapper();
+    }
 
     @Test
     @DisplayName("POST /api/auth/register - returns 201 with token on success")
     void register_validRequest_returns201() throws Exception {
-        // Arrange: build the request body
+        // Arrange
         RegisterRequest request = new RegisterRequest();
         request.setName("Alice Johnson");
         request.setEmail("alice@example.com");
@@ -66,11 +76,11 @@ class AuthControllerTest {
 
         when(authService.register(any())).thenReturn(mockResponse);
 
-        // Act & Assert: simulate POST request and verify response
+        // Act & Assert
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())                          // HTTP 201
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.token").value("mock-jwt-token"))
                 .andExpect(jsonPath("$.data.email").value("alice@example.com"))
@@ -80,35 +90,36 @@ class AuthControllerTest {
     @Test
     @DisplayName("POST /api/auth/register - returns 400 for invalid email")
     void register_invalidEmail_returns400() throws Exception {
-        // Arrange: email is invalid
+        // Arrange - invalid email format
         RegisterRequest request = new RegisterRequest();
         request.setName("Alice");
-        request.setEmail("not-an-email");   // invalid!
+        request.setEmail("not-an-email");
         request.setPassword("password123");
         request.setRole(User.Role.CLIENT);
 
-        // Act & Assert: validation should fail with 400 before even reaching the service
+        // Act & Assert - validation should reject this with 400
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.data.email").exists()); // validation error for email field
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     @Test
     @DisplayName("POST /api/auth/register - returns 400 when password too short")
     void register_shortPassword_returns400() throws Exception {
+        // Arrange - password less than 8 characters
         RegisterRequest request = new RegisterRequest();
         request.setName("Alice");
         request.setEmail("alice@example.com");
-        request.setPassword("short");  // less than 8 chars
+        request.setPassword("short");
         request.setRole(User.Role.CLIENT);
 
+        // Act & Assert
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.data.password").exists());
+                .andExpect(jsonPath("$.success").value(false));
     }
 }

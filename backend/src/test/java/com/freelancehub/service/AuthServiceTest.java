@@ -92,7 +92,6 @@ class AuthServiceTest {
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
 
         UserDetails mockUserDetails = mock(UserDetails.class);
-        when(mockUserDetails.getUsername()).thenReturn("alice@example.com");
         when(userDetailsService.loadUserByUsername("alice@example.com")).thenReturn(mockUserDetails);
         when(jwtUtil.generateToken(mockUserDetails)).thenReturn("mocked-jwt-token");
 
