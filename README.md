@@ -11,7 +11,6 @@ A production-ready **freelancing marketplace** built with Java Spring Boot, depl
 | URL | Description |
 |-----|-------------|
 | `http://100.48.74.127:8080` | Live application on AWS EC2 |
-| `http://100.48.74.127:8080/actuator/health` | Health check endpoint |
 
 ---
 
