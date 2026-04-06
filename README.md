@@ -1,451 +1,17 @@
 # FreelanceHub 🚀
 
-A production-structured **freelancing marketplace** built as a portfolio project demonstrating
-Software Engineering, AWS Cloud, and DevOps/CI-CD skills — using only free-tier tools.
+A production-ready **freelancing marketplace** built with Java Spring Boot, deployed on AWS EC2 with a fully automated CI/CD pipeline using GitHub Actions.
 
-> **Clients** post projects with a budget and deadline. **Freelancers** browse, submit proposals,
-> and compete for work. Clients review bids and hire the best fit.
+> Clients post projects with budgets and deadlines. Freelancers browse opportunities, submit competitive bids, and clients hire the best fit — all through a clean, responsive web interface.
 
 ---
 
 ## 🌐 Live Demo
 
-| URL | Notes |
-|-----|-------|
-| `http://<EC2-IP>:8080` | Backend API + Frontend (served by Spring Boot) |
-| `http://<EC2-IP>:8080/api/auth/register` | REST API entry point |
-
-> *(Replace `<EC2-IP>` with your EC2 instance's public IP after deployment.)*
-
----
-
-## ✨ Features
-
-### Authentication
-- JWT-based stateless authentication (no server sessions)
-- BCrypt password hashing
-- Two roles: **Client** and **Freelancer**
-- Token stored in localStorage, sent in `Authorization: Bearer` header
-
-### Client Features
-- Post projects (title, description, budget, deadline)
-- View all bids received on each project
-- Accept a bid (marks winner, rejects others, sets project `IN_PROGRESS`)
-- Delete projects
-
-### Freelancer Features
-- Browse all open projects with search and pagination
-- View project details
-- Submit bid (proposal + amount) — one bid per project
-- Dashboard showing all submitted bids and their statuses
-
-### Profile
-- View profile stats (projects posted / bids submitted)
-- Upload profile image to **AWS S3**
-
----
-
-## 🛠 Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | Java 17, Spring Boot 3.2, Spring Security |
-| Database ORM | Spring Data JPA (Hibernate) |
-| Authentication | JWT (jjwt), BCrypt |
-| Frontend | HTML5, CSS3, Bootstrap 5, Vanilla JS |
-| Database | MySQL 8 |
-| Cloud | AWS EC2 (compute), AWS S3 (file storage) |
-| CI/CD | GitHub Actions |
-| Build | Maven |
-| Testing | JUnit 5, Mockito, MockMvc, H2 in-memory |
-
----
-
-## 🏗 Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Developer  →  GitHub  →  GitHub Actions (CI/CD)           │
-│                                  │                          │
-│                           ┌──────┴──────┐                  │
-│                           │  SSH Deploy │                   │
-│                           └──────┬──────┘                   │
-└──────────────────────────────────┼──────────────────────────┘
-                                   ▼
-┌─────────────────────────────────────────────────────────────┐
-│  AWS EC2 Instance (Ubuntu)                                  │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Spring Boot App (port 8080)                         │   │
-│  │                                                      │   │
-│  │  Controllers → Services → Repositories → MySQL       │   │
-│  │                    │                                 │   │
-│  │                    └──→  AWS S3 (profile images)     │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-
-Browser ──→ Static HTML/JS (served by Spring Boot)
-       ──→ REST API calls with JWT token
-```
-
-### Package Structure
-
-```
-backend/src/main/java/com/freelancehub/
-├── FreelanceHubApplication.java     # Entry point
-├── config/
-│   ├── SecurityConfig.java          # Spring Security + CORS + JWT
-│   └── AwsS3Config.java             # S3 client bean
-├── controller/                      # REST API handlers
-│   ├── AuthController.java          # POST /api/auth/register|login
-│   ├── ProjectController.java       # /api/projects/**
-│   ├── BidController.java           # /api/bids/**
-│   └── UserController.java          # /api/users/**
-├── service/                         # Business logic
-│   ├── AuthService.java
-│   ├── ProjectService.java
-│   ├── BidService.java
-│   └── UserService.java
-├── repository/                      # JPA database access
-│   ├── UserRepository.java
-│   ├── ProjectRepository.java
-│   └── BidRepository.java
-├── entity/                          # JPA entities (DB tables)
-│   ├── User.java
-│   ├── Project.java
-│   └── Bid.java
-├── dto/
-│   ├── request/                     # Incoming request shapes
-│   └── response/                    # Outgoing response shapes
-├── security/                        # JWT filter + UserDetailsService
-│   ├── JwtUtil.java
-│   ├── JwtAuthenticationFilter.java
-│   └── CustomUserDetailsService.java
-└── exception/                       # Global error handling
-    ├── GlobalExceptionHandler.java
-    ├── ResourceNotFoundException.java
-    ├── BadRequestException.java
-    └── ForbiddenException.java
-```
-
----
-
-## 🗄 Database Schema
-
-```sql
--- Users table (clients and freelancers share one table)
-CREATE TABLE users (
-  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
-  name             VARCHAR(100)  NOT NULL,
-  email            VARCHAR(150)  NOT NULL UNIQUE,
-  password         VARCHAR(255)  NOT NULL,   -- BCrypt hash
-  role             ENUM('CLIENT','FREELANCER') NOT NULL,
-  profile_image_url VARCHAR(500),
-  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Projects table
-CREATE TABLE projects (
-  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-  title       VARCHAR(200) NOT NULL,
-  description TEXT         NOT NULL,
-  budget      DECIMAL(10,2) NOT NULL,
-  deadline    DATE          NOT NULL,
-  client_id   BIGINT        NOT NULL,   -- FK → users.id
-  status      ENUM('OPEN','IN_PROGRESS','COMPLETED','CANCELLED') DEFAULT 'OPEN',
-  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (client_id) REFERENCES users(id)
-);
-
--- Bids table (one bid per freelancer per project enforced by unique key)
-CREATE TABLE bids (
-  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
-  project_id    BIGINT        NOT NULL,   -- FK → projects.id
-  freelancer_id BIGINT        NOT NULL,   -- FK → users.id
-  proposal      TEXT          NOT NULL,
-  bid_amount    DECIMAL(10,2) NOT NULL,
-  status        ENUM('PENDING','ACCEPTED','REJECTED') DEFAULT 'PENDING',
-  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (project_id)    REFERENCES projects(id),
-  FOREIGN KEY (freelancer_id) REFERENCES users(id),
-  UNIQUE KEY uq_bid_project_freelancer (project_id, freelancer_id)
-);
-```
-*(Hibernate auto-creates these tables on first startup via `spring.jpa.hibernate.ddl-auto=update`)*
-
----
-
-## 🔌 REST API Reference
-
-### Auth (public)
-| Method | URL | Body | Description |
-|--------|-----|------|-------------|
-| POST | `/api/auth/register` | `{name, email, password, role}` | Create account |
-| POST | `/api/auth/login` | `{email, password}` | Get JWT token |
-
-### Projects
-| Method | URL | Auth | Description |
-|--------|-----|------|-------------|
-| GET | `/api/projects?page=0&size=10` | None | Browse open projects |
-| GET | `/api/projects/{id}` | None | Get project details |
-| GET | `/api/projects/search?keyword=X` | None | Search projects |
-| POST | `/api/projects` | CLIENT | Post a new project |
-| GET | `/api/projects/my` | CLIENT | My projects |
-| DELETE | `/api/projects/{id}` | CLIENT | Delete project |
-
-### Bids
-| Method | URL | Auth | Description |
-|--------|-----|------|-------------|
-| POST | `/api/bids/projects/{projectId}` | FREELANCER | Submit a bid |
-| GET | `/api/bids/projects/{projectId}` | CLIENT (owner) | View bids |
-| GET | `/api/bids/my` | FREELANCER | My bids |
-| PUT | `/api/bids/{bidId}/accept` | CLIENT (owner) | Accept a bid |
-
-### Users
-| Method | URL | Auth | Description |
-|--------|-----|------|-------------|
-| GET | `/api/users/me` | Any | Get profile |
-| POST | `/api/users/me/profile-image` | Any | Upload image to S3 |
-
----
-
-## 🚀 Running Locally
-
-### Prerequisites
-- Java 17 (`java -version`)
-- Maven 3.8+ (`mvn -version`)
-- MySQL 8 running locally
-
-### 1. Clone the repository
-```bash
-git clone https://github.com/<your-username>/freelancehub.git
-cd freelancehub
-```
-
-### 2. Create the database
-```sql
-CREATE DATABASE freelancehub CHARACTER SET utf8mb4;
-```
-
-### 3. Set environment variables and run
-```bash
-# Option A: use the convenience script
-chmod +x scripts/run-local.sh
-./scripts/run-local.sh
-
-# Option B: set vars manually, then run Maven
-export DB_URL="jdbc:mysql://localhost:3306/freelancehub?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
-export DB_USERNAME="root"
-export DB_PASSWORD="your_mysql_password"
-export JWT_SECRET="AnyLongSecretStringAtLeast32CharsLong"
-
-cd backend
-mvn spring-boot:run
-```
-
-### 4. Open the app
-```
-http://localhost:8080
-```
-
-### 5. Run tests only
-```bash
-cd backend
-mvn test
-```
-
----
-
-## ☁️ AWS Deployment
-
-### Step 1 — Launch EC2 Instance
-1. Go to **AWS Console → EC2 → Launch Instance**
-2. Choose **Ubuntu Server 24.04 LTS** (free tier eligible)
-3. Instance type: **t2.micro** (free tier)
-4. Create or select a Key Pair — download the `.pem` file
-5. **Security Group** — add these inbound rules:
-   - SSH (22) — from your IP only
-   - Custom TCP (8080) — from Anywhere (0.0.0.0/0)
-6. Launch the instance
-
-### Step 2 — Run the Setup Script
-```bash
-# Connect to EC2
-ssh -i your-key.pem ubuntu@<EC2-PUBLIC-IP>
-
-# Upload and run setup script
-scp -i your-key.pem scripts/ec2-setup.sh ubuntu@<EC2-IP>:~
-./ec2-setup.sh
-```
-
-### Step 3 — Configure GitHub Secrets
-Go to your GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**
-
-| Secret Name | Value |
-|-------------|-------|
-| `EC2_HOST` | Your EC2 public IP address |
-| `EC2_USERNAME` | `ubuntu` |
-| `EC2_SSH_KEY` | Contents of your `.pem` key file |
-| `DB_URL` | `jdbc:mysql://localhost:3306/freelancehub?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true` |
-| `DB_USERNAME` | `freelancehub` |
-| `DB_PASSWORD` | Password you set during ec2-setup.sh |
-| `JWT_SECRET` | A long random string (min 32 chars) |
-| `AWS_ACCESS_KEY_ID` | *(optional — for S3)* |
-| `AWS_SECRET_ACCESS_KEY` | *(optional — for S3)* |
-
-### Step 4 — Push to Deploy
-```bash
-git add .
-git commit -m "Initial deployment"
-git push origin main
-```
-
-The GitHub Actions pipeline runs automatically:
-1. ✅ Builds the JAR on a free GitHub runner VM
-2. ✅ Runs all unit tests against H2 in-memory DB
-3. ✅ Copies the JAR to EC2 via SSH
-4. ✅ Restarts the application on EC2
-5. ✅ Health check confirms the app is live
-
-### View logs on EC2
-```bash
-ssh -i your-key.pem ubuntu@<EC2-IP>
-tail -f ~/freelancehub/app.log
-```
-
----
-
-## 🪣 AWS S3 Setup (Optional — for profile images)
-
-1. Go to **AWS Console → S3 → Create Bucket**
-2. Name: `freelancehub-profiles` (or any unique name)
-3. Region: `us-east-1` (match `AWS_REGION` env var)
-4. **Object ownership**: ACLs disabled → Bucket owner enforced
-5. **Block public access**: Uncheck all (for public image URLs)
-   > ⚠️ For production: use pre-signed URLs instead of public buckets.
-6. Create an IAM user with `AmazonS3FullAccess`, download access keys
-7. Add `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to GitHub Secrets
-
----
-
-## 🔄 CI/CD Pipeline Explained
-
-```
-Push to main
-     │
-     ▼
-┌─────────────────────────────────────┐
-│  JOB 1: Build & Test (CI)           │
-│                                     │
-│  1. actions/checkout@v4             │
-│     → clone repo onto runner VM     │
-│                                     │
-│  2. actions/setup-java@v4           │
-│     → install Java 17 + cache Maven │
-│                                     │
-│  3. mvn clean verify                │
-│     → compile + run all tests       │
-│     → uses H2 (no real DB needed)   │
-│                                     │
-│  4. upload-artifact                 │
-│     → save JAR for deploy job       │
-└───────────────┬─────────────────────┘
-                │ only if CI passes
-                ▼
-┌─────────────────────────────────────┐
-│  JOB 2: Deploy (CD)                 │
-│                                     │
-│  1. download-artifact               │
-│     → fetch JAR from CI job         │
-│                                     │
-│  2. appleboy/scp-action             │
-│     → copy JAR to EC2 via SCP       │
-│                                     │
-│  3. appleboy/ssh-action             │
-│     → SSH into EC2                  │
-│     → stop old process (pkill)      │
-│     → start new JAR (nohup java)    │
-│                                     │
-│  4. curl health check               │
-│     → verify app is responding      │
-└─────────────────────────────────────┘
-```
-
----
-
-## 🧪 Testing
-
-Tests are in `backend/src/test/java/com/freelancehub/`:
-
-| Test Class | Type | What it tests |
-|-----------|------|--------------|
-| `AuthServiceTest` | Unit | Registration, login, BCrypt hashing, duplicate email |
-| `ProjectServiceTest` | Unit | Role enforcement, ownership checks |
-| `AuthControllerTest` | Integration | HTTP status codes, JSON structure, validation |
-
-Run tests:
-```bash
-cd backend
-mvn test
-
-# With coverage report
-mvn verify
-# Report at: backend/target/site/jacoco/index.html
-```
-
----
-
-## 📂 Project Structure
-
-```
-freelancehub/
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yml            # GitHub Actions pipeline
-├── backend/
-│   ├── pom.xml                  # Maven dependencies
-│   └── src/
-│       ├── main/
-│       │   ├── java/com/freelancehub/  # All Java source code
-│       │   └── resources/
-│       │       ├── application.properties
-│       │       └── static/      # Frontend (HTML/CSS/JS)
-│       └── test/
-│           ├── java/com/freelancehub/ # Unit + integration tests
-│           └── resources/application-test.properties
-├── scripts/
-│   ├── ec2-setup.sh             # One-time EC2 provisioning
-│   └── run-local.sh             # Local development shortcut
-├── .gitignore
-└── README.md
-```
-
----
-
-## 💼 Resume Talking Points
-
-This project demonstrates:
-
-**Software Engineering**
-- Layered architecture (Controller → Service → Repository → Entity)
-- DTOs to decouple API contracts from database entities
-- Global exception handling with consistent JSON error responses
-- Input validation with Bean Validation annotations
-- Spring Security with JWT stateless authentication
-- Role-based access control (`@PreAuthorize`)
-
-**Cloud (AWS)**
-- EC2 instance configuration and management
-- S3 bucket for binary file storage with AWS SDK v2
-- IAM security best practices (least privilege)
-- Environment variables for secrets management
-
-**DevOps / CI-CD**
-- GitHub Actions pipeline triggered on push to main
-- Separate CI and CD jobs with dependency chain (`needs`)
-- Test isolation using H2 in-memory database
-- SSH-based zero-downtime deployment
-- Automated health check after deployment
+| URL | Description |
+|-----|-------------|
+| `http://100.48.74.127:8080` | Live application on AWS EC2 |
+| `http://100.48.74.127:8080/actuator/health` | Health check endpoint |
 
 ---
 
@@ -453,18 +19,487 @@ This project demonstrates:
 
 | Page | Screenshot |
 |------|-----------|
-| Home | *(add screenshot)* |
+| Homepage | *(add screenshot)* |
 | Browse Projects | *(add screenshot)* |
-| Project Detail + Bid | *(add screenshot)* |
 | Client Dashboard | *(add screenshot)* |
 | Freelancer Dashboard | *(add screenshot)* |
+| Project Detail + Bids | *(add screenshot)* |
+| GitHub Actions Pipeline | *(add screenshot)* |
+
+---
+
+## ✨ Features
+
+### Authentication & Security
+- JWT-based stateless authentication
+- BCrypt password hashing — passwords never stored in plain text
+- Role-based access control — clients and freelancers have different permissions
+- Token stored in browser, sent with every protected API request
+
+### Client Features
+- Register and login as a Client
+- Post projects with title, description, budget, and deadline
+- View all bids received on each project
+- Accept the best bid — automatically rejects all other bids and marks project as In Progress
+- Delete own projects
+- Dashboard showing all posted projects with stats
+
+### Freelancer Features
+- Register and login as a Freelancer
+- Browse all open projects with keyword search and pagination
+- View full project details including budget and deadline
+- Submit a proposal with a custom bid amount
+- One bid per project enforced at database level
+- Dashboard showing all submitted bids and their current status
+
+### Profile
+- View account information and activity stats
+- Upload a profile photo stored in AWS S3
+
+---
+
+## 🛠 Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Language | Java 17 | Backend programming language |
+| Framework | Spring Boot 3.2 | REST API server and dependency injection |
+| Security | Spring Security + JWT | Authentication and authorization |
+| Database ORM | Spring Data JPA + Hibernate | Object-relational mapping |
+| Database | MySQL 8 | Persistent data storage |
+| Build Tool | Maven | Dependency management and packaging |
+| Frontend | HTML5, CSS3, Bootstrap 5 | Responsive user interface |
+| JavaScript | Vanilla JS | API calls and dynamic page updates |
+| Cloud Compute | AWS EC2 (t2.micro) | Application hosting |
+| Cloud Storage | AWS S3 | Profile image storage |
+| CI/CD | GitHub Actions | Automated build, test, and deploy |
+| Testing | JUnit 5, Mockito, MockMvc | Unit and integration tests |
+| Version Control | Git + GitHub | Source code management |
+
+---
+
+## 🏗 Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Developer pushes code → GitHub → GitHub Actions triggers       │
+│                                                                  │
+│  CI: Build → Test → Package JAR                                 │
+│  CD: Copy JAR to EC2 → Restart app → Health check              │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │ SSH Deploy
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  AWS EC2 Instance (Ubuntu, t2.micro — Free Tier)               │
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Spring Boot Application (port 8080)                      │  │
+│  │                                                           │  │
+│  │  Controller → Service → Repository → MySQL 8             │  │
+│  │                  │                                        │  │
+│  │                  └──→ AWS S3 (profile images)            │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+
+Browser → Static HTML/JS/CSS (served by Spring Boot)
+        → REST API calls with JWT Authorization header
+```
+
+---
+
+## 📁 Project Structure
+
+```
+freelancehub/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml                  ← GitHub Actions pipeline
+├── backend/
+│   ├── pom.xml                        ← Maven dependencies
+│   └── src/
+│       ├── main/
+│       │   ├── java/com/freelancehub/
+│       │   │   ├── config/            ← Security + AWS S3 configuration
+│       │   │   ├── controller/        ← REST API endpoints
+│       │   │   │   ├── AuthController.java
+│       │   │   │   ├── ProjectController.java
+│       │   │   │   ├── BidController.java
+│       │   │   │   └── UserController.java
+│       │   │   ├── service/           ← Business logic layer
+│       │   │   │   ├── AuthService.java
+│       │   │   │   ├── ProjectService.java
+│       │   │   │   ├── BidService.java
+│       │   │   │   └── UserService.java
+│       │   │   ├── repository/        ← Database access layer
+│       │   │   │   ├── UserRepository.java
+│       │   │   │   ├── ProjectRepository.java
+│       │   │   │   └── BidRepository.java
+│       │   │   ├── entity/            ← JPA database table mappings
+│       │   │   │   ├── User.java
+│       │   │   │   ├── Project.java
+│       │   │   │   └── Bid.java
+│       │   │   ├── dto/               ← Request and response data shapes
+│       │   │   ├── security/          ← JWT filter and user loader
+│       │   │   └── exception/         ← Global error handling
+│       │   └── resources/
+│       │       ├── application.properties
+│       │       └── static/            ← Frontend pages
+│       │           ├── index.html
+│       │           ├── css/styles.css
+│       │           ├── js/api.js
+│       │           └── pages/
+│       │               ├── login.html
+│       │               ├── register.html
+│       │               ├── dashboard.html
+│       │               ├── projects.html
+│       │               ├── project-detail.html
+│       │               ├── post-project.html
+│       │               └── profile.html
+│       └── test/                      ← Unit and integration tests
+├── scripts/
+│   ├── ec2-setup.sh                   ← One-time EC2 server setup
+│   └── run-local.sh                   ← Local development shortcut
+└── README.md
+```
+
+---
+
+## 🗄 Database Schema
+
+```sql
+-- Users table (clients and freelancers in one table, distinguished by role)
+CREATE TABLE users (
+    id                BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name              VARCHAR(100)  NOT NULL,
+    email             VARCHAR(150)  NOT NULL UNIQUE,
+    password          VARCHAR(255)  NOT NULL,   -- BCrypt hashed
+    role              ENUM('CLIENT','FREELANCER') NOT NULL,
+    profile_image_url VARCHAR(500),
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Projects table
+CREATE TABLE projects (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title       VARCHAR(200)  NOT NULL,
+    description TEXT          NOT NULL,
+    budget      DECIMAL(10,2) NOT NULL,
+    deadline    DATE          NOT NULL,
+    client_id   BIGINT        NOT NULL,
+    status      ENUM('OPEN','IN_PROGRESS','COMPLETED','CANCELLED') DEFAULT 'OPEN',
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES users(id)
+);
+
+-- Bids table (unique constraint: one bid per freelancer per project)
+CREATE TABLE bids (
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    project_id    BIGINT        NOT NULL,
+    freelancer_id BIGINT        NOT NULL,
+    proposal      TEXT          NOT NULL,
+    bid_amount    DECIMAL(10,2) NOT NULL,
+    status        ENUM('PENDING','ACCEPTED','REJECTED') DEFAULT 'PENDING',
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id)    REFERENCES projects(id),
+    FOREIGN KEY (freelancer_id) REFERENCES users(id),
+    UNIQUE KEY uq_bid_project_freelancer (project_id, freelancer_id)
+);
+```
+
+> Hibernate auto-creates and manages all tables on first startup via `spring.jpa.hibernate.ddl-auto=update`
+
+---
+
+## 🔌 REST API Reference
+
+### Auth — Public endpoints
+
+| Method | Endpoint | Request Body | Description |
+|--------|----------|-------------|-------------|
+| POST | `/api/auth/register` | `{name, email, password, role}` | Create new account |
+| POST | `/api/auth/login` | `{email, password}` | Login and receive JWT token |
+
+### Projects
+
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|--------------|-------------|
+| GET | `/api/projects?page=0&size=10` | None | Browse all open projects |
+| GET | `/api/projects/{id}` | None | Get project details |
+| GET | `/api/projects/search?keyword=X` | None | Search projects by keyword |
+| POST | `/api/projects` | CLIENT | Post a new project |
+| GET | `/api/projects/my` | CLIENT | Get my posted projects |
+| DELETE | `/api/projects/{id}` | CLIENT (owner) | Delete a project |
+
+### Bids
+
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|--------------|-------------|
+| POST | `/api/bids/projects/{projectId}` | FREELANCER | Submit a bid |
+| GET | `/api/bids/projects/{projectId}` | CLIENT (owner) | View bids on project |
+| GET | `/api/bids/my` | FREELANCER | View my submitted bids |
+| PUT | `/api/bids/{bidId}/accept` | CLIENT (owner) | Accept a bid |
+
+### Users
+
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|--------------|-------------|
+| GET | `/api/users/me` | Any | Get my profile |
+| POST | `/api/users/me/profile-image` | Any | Upload profile photo to S3 |
+
+---
+
+## 🚀 Running Locally
+
+### Prerequisites
+
+- Java 17 — download from https://adoptium.net
+- Maven 3.8+ — download from https://maven.apache.org
+- MySQL 8 — download from https://dev.mysql.com/downloads
+
+### Step 1 — Clone the repository
+
+```bash
+git clone https://github.com/KalpeshPatel06/freelancehub.git
+cd freelancehub
+```
+
+### Step 2 — Create the database
+
+```bash
+mysql -u root -p
+```
+
+```sql
+CREATE DATABASE freelancehub CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+EXIT;
+```
+
+### Step 3 — Set environment variables
+
+**Windows PowerShell:**
+```powershell
+$env:DB_URL="jdbc:mysql://localhost:3306/freelancehub?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+$env:DB_USERNAME="root"
+$env:DB_PASSWORD="your_mysql_password"
+$env:JWT_SECRET="AnyRandomStringAtLeast32CharactersLong1234"
+```
+
+**macOS / Linux:**
+```bash
+export DB_URL="jdbc:mysql://localhost:3306/freelancehub?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+export DB_USERNAME="root"
+export DB_PASSWORD="your_mysql_password"
+export JWT_SECRET="AnyRandomStringAtLeast32CharactersLong1234"
+```
+
+### Step 4 — Run the application
+
+```bash
+cd backend
+mvn spring-boot:run
+```
+
+### Step 5 — Open in browser
+
+```
+http://localhost:8080
+```
+
+Hibernate automatically creates all database tables on first startup.
+
+---
+
+## 🧪 Running Tests
+
+```bash
+cd backend
+mvn test
+```
+
+Tests use an H2 in-memory database — no MySQL setup required.
+
+Expected output:
+```
+Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+### Test coverage
+
+| Test Class | Type | What is tested |
+|-----------|------|---------------|
+| `AuthServiceTest` | Unit | Registration, login, BCrypt hashing, duplicate email check |
+| `ProjectServiceTest` | Unit | Role enforcement, ownership checks, project creation |
+| `AuthControllerTest` | Integration | HTTP status codes, JSON responses, input validation |
+
+---
+
+## ☁️ AWS Deployment
+
+### Infrastructure
+
+| Service | Usage | Cost |
+|---------|-------|------|
+| EC2 t2.micro | Runs the Spring Boot application | Free tier (750 hrs/month) |
+| S3 | Stores profile images | Free tier (5 GB) |
+| Security Group | Controls inbound traffic on port 8080 | Free |
+
+### EC2 Setup Steps
+
+**1. Launch EC2 instance**
+- AMI: Ubuntu Server 24.04 LTS
+- Instance type: t2.micro (free tier)
+- Security group: open port 22 (SSH) and port 8080 (app)
+
+**2. Install dependencies on EC2**
+```bash
+sudo apt-get update -y
+sudo apt-get install -y openjdk-17-jdk mysql-server
+sudo systemctl start mysql
+```
+
+**3. Create database**
+```bash
+sudo mysql
+```
+```sql
+CREATE DATABASE freelancehub CHARACTER SET utf8mb4;
+CREATE USER 'freelancehub'@'localhost' IDENTIFIED BY 'your_password';
+GRANT ALL PRIVILEGES ON freelancehub.* TO 'freelancehub'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+**4. Start the application**
+```bash
+nohup java -jar app.jar \
+  "--spring.datasource.url=jdbc:mysql://localhost:3306/freelancehub" \
+  "--spring.datasource.username=freelancehub" \
+  "--spring.datasource.password=your_password" \
+  "--app.jwt.secret=your_jwt_secret" \
+  "--server.port=8080" \
+  > app.log 2>&1 &
+```
+
+---
+
+## 🔄 CI/CD Pipeline
+
+Every push to the `main` branch triggers the automated pipeline.
+
+```
+Push to main branch
+        │
+        ▼
+┌─────────────────────────┐
+│   Job 1: Build & Test   │
+│                         │
+│  1. Checkout code       │
+│  2. Install Java 17     │
+│  3. mvn clean verify    │
+│  4. Run 11 unit tests   │
+│  5. Package JAR file    │
+└────────────┬────────────┘
+             │ Only if all tests pass
+             ▼
+┌─────────────────────────┐
+│   Job 2: Deploy to EC2  │
+│                         │
+│  1. Download JAR        │
+│  2. Copy JAR to EC2     │
+│  3. Stop old process    │
+│  4. Start new JAR       │
+│  5. Health check        │
+└─────────────────────────┘
+```
+
+### GitHub Secrets required
+
+| Secret | Description |
+|--------|-------------|
+| `EC2_HOST` | EC2 public IP address |
+| `EC2_USERNAME` | `ubuntu` |
+| `EC2_SSH_KEY` | Contents of the `.pem` private key file |
+| `DB_URL` | MySQL JDBC connection URL |
+| `DB_USERNAME` | Database username |
+| `DB_PASSWORD` | Database password |
+| `JWT_SECRET` | JWT signing secret (min 32 characters) |
+
+---
+
+## 💡 Key Design Decisions
+
+**Stateless JWT Authentication**
+No server-side sessions. Every request carries a signed JWT token in the `Authorization: Bearer` header. The server validates the token signature on every request without touching the database.
+
+**DTO Separation**
+Entities never leave the service layer. Separate DTO classes define exactly what data enters and leaves the API. This prevents accidentally exposing internal fields and keeps the API contract independent of the database schema.
+
+**Global Exception Handler**
+One centralized `@RestControllerAdvice` class catches all exceptions and converts them into a consistent JSON response format. Every error response has the same structure — `success`, `message`, `data`, `timestamp`.
+
+**Role-Based Access Control**
+Two layers of authorization — `@PreAuthorize` annotations on controllers check the user's role, and service-layer ownership checks verify the user owns the resource they are trying to modify.
+
+**H2 for Tests**
+Unit and integration tests use an H2 in-memory database configured via a separate `application-test.properties`. Tests run without any external database dependency, making them fast and portable across any machine.
+
+---
+
+## 📋 API Response Format
+
+Every API endpoint returns the same consistent JSON structure:
+
+**Success response:**
+```json
+{
+  "success": true,
+  "message": "Project created successfully",
+  "data": { ... },
+  "timestamp": "2024-01-15T10:30:00"
+}
+```
+
+**Error response:**
+```json
+{
+  "success": false,
+  "message": "Project not found with id: 42",
+  "timestamp": "2024-01-15T10:30:00"
+}
+```
+
+**Validation error response:**
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "data": {
+    "email": "Please provide a valid email address",
+    "password": "Password must be at least 8 characters"
+  },
+  "timestamp": "2024-01-15T10:30:00"
+}
+```
+
+---
+
+## 🔒 Security Implementation
+
+- Passwords hashed with BCrypt (strength 10 — 1024 hashing rounds)
+- JWT tokens signed with HMAC-SHA256
+- Token expiration set to 24 hours
+- CORS configured to allow frontend requests
+- CSRF disabled for stateless REST API
+- All sensitive configuration read from environment variables — no hardcoded secrets
+- `.env` and `.pem` files excluded from Git via `.gitignore`
 
 ---
 
 ## 📄 License
 
-MIT License — free to use, modify, and distribute.
+MIT License — free to use, modify, and distribute for any purpose.
 
 ---
 
-*Built with ❤️ as a portfolio project — demonstrating Java, Spring Boot, AWS, and GitHub Actions.*
+*Built with Java 17 · Spring Boot 3.2 · MySQL 8 · AWS EC2 · GitHub Actions*
