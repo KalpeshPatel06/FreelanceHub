@@ -15,19 +15,6 @@ A production-ready **freelancing marketplace** built with Java Spring Boot, depl
 
 ---
 
-## 📸 Screenshots
-
-| Page | Screenshot |
-|------|-----------|
-| Homepage | *(add screenshot)* |
-| Browse Projects | *(add screenshot)* |
-| Client Dashboard | *(add screenshot)* |
-| Freelancer Dashboard | *(add screenshot)* |
-| Project Detail + Bids | *(add screenshot)* |
-| GitHub Actions Pipeline | *(add screenshot)* |
-
----
-
 ## ✨ Features
 
 ### Authentication & Security
