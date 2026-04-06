@@ -69,21 +69,21 @@ A production-ready **freelancing marketplace** built with Java Spring Boot, depl
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Developer pushes code → GitHub → GitHub Actions triggers       │
-│                                                                  │
+│                                                                 │
 │  CI: Build → Test → Package JAR                                 │
-│  CD: Copy JAR to EC2 → Restart app → Health check              │
+│  CD: Copy JAR to EC2 → Restart app → Health check               │
 └──────────────────────────────┬──────────────────────────────────┘
                                │ SSH Deploy
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  AWS EC2 Instance (Ubuntu, t2.micro — Free Tier)               │
-│                                                                  │
+│  AWS EC2 Instance (Ubuntu, t2.micro — Free Tier)                │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  Spring Boot Application (port 8080)                      │  │
 │  │                                                           │  │
-│  │  Controller → Service → Repository → MySQL 8             │  │
+│  │  Controller → Service → Repository → MySQL 8              │  │
 │  │                  │                                        │  │
-│  │                  └──→ AWS S3 (profile images)            │  │
+│  │                  └──→ AWS S3 (profile images)             │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -479,12 +479,6 @@ Every API endpoint returns the same consistent JSON structure:
 - CSRF disabled for stateless REST API
 - All sensitive configuration read from environment variables — no hardcoded secrets
 - `.env` and `.pem` files excluded from Git via `.gitignore`
-
----
-
-## 📄 License
-
-MIT License — free to use, modify, and distribute for any purpose.
 
 ---
 
