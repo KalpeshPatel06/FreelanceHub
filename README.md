@@ -12,6 +12,7 @@ A production-ready **freelancing marketplace** built with Java Spring Boot, depl
 |-----|-------------|
 | `http://100.48.74.127:8080` | Live application on AWS EC2 |
 
+> **Note:** The EC2 instance used to host this application has been deleted, so the above link is no longer accessible. The application was fully functional and tested successfully prior to the deletion of the EC2 instance.
 ---
 
 ## ✨ Features
